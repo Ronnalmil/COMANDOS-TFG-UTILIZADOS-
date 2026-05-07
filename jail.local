@@ -1,0 +1,97 @@
+[DEFAULT]
+# Parámetros generales
+bantime  = 3600
+findtime = 60
+maxretry = 1
+banaction = nftables-multiport
+backend  = auto
+#ignoreip = 127.0.0.1/8 ::1
+
+# Puedes añadir aquí la IP de la máquina atacante si NO quieres que se bloquee
+# ignoreip = 127.0.0.1/8 ::1 192.168.56.1
+
+# Acción por defecto (iptables)
+#banaction = iptables-multiport
+banaction_allports = iptables-allports
+destemail = root@localhost
+sender = fail2ban@localhost
+mta = sendmail
+
+# -------------------------------------------------------------------
+# Jails específicos para Apache
+# -------------------------------------------------------------------
+
+[apache-ab]
+enabled = true
+filter = apache-ab
+port = http,https
+logpath = /var/log/apache2/access.log
+maxretry = 1
+findtime = 60
+bantime = 3600
+banaction = nftables-multiport
+
+[apache-flood-test]
+enabled  = true
+port     = http,https
+filter   = apache-flood-test
+logpath  = /var/log/apache2/access.log
+maxretry = 1
+findtime = 60
+bantime  = 10m
+banaction = nftables-multiport
+
+
+[apache-badbots]
+enabled  = true
+port     = http,https
+filter   = apache-badbots
+logpath  = /var/log/apache2/access.log
+maxretry = 1
+findtime = 600
+bantime  = 30m
+banaction = nftables-multiport
+
+[apache-nikto]
+enabled  = true
+port     = http,https
+filter   = apache-nikto
+logpath  = /var/log/apache2/access.log
+maxretry = 1
+findtime = 600
+bantime  = 1h
+
+[apache-sqlmap]
+enabled  = true
+port     = http,https
+filter   = apache-sqlmap
+logpath  = /var/log/apache2/access.log
+maxretry = 1
+findtime = 600
+bantime  = 1h
+
+# Usa el filtro apache-auth que ya trae Fail2ban
+[apache-auth]
+enabled  = true
+port     = http,https
+filter   = apache-auth
+logpath  = /var/log/apache2/error.log
+maxretry = 1
+findtime = 600
+bantime  = 30m
+
+# -------------------------------------------------------------------
+# Jail recidive (reincidentes)
+# -------------------------------------------------------------------
+
+#[recidive]
+#enabled  = true
+#logpath  = /var/log/fail2ban.log
+#backend  = auto
+#filter   = recidive
+## Si una IP aparece baneada varias veces en distintas jails,
+## recidive la bloqueará más tiempo.
+#bantime  = 1w
+#findtime = 1d
+#maxretry = 1
+#ignoreip = 172.30.250.151
