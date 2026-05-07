@@ -1,0 +1,167 @@
+# Configurar Debian 11 como router NAT en VirtualBox
+
+Este documento explica cómo configurar una máquina virtual con Debian 11 Bullseye para que actúe como router NAT. De esta forma, otras máquinas virtuales conectadas a una **Red Interna** podrán tener acceso a internet a través de él.
+
+---
+
+## 📦 Requisitos previos
+
+- VirtualBox instalado en el equipo anfitrión.
+- Una máquina virtual con **Debian 11 Bullseye** (actuará como router).
+- Al menos 3 máquinas virtuales adicionales (clientes).
+- Acceso root al router Debian.
+
+---
+
+## 🖧 Configuración de adaptadores en VirtualBox
+
+| Máquina virtual       | Adaptador 1              | Adaptador 2                |
+|-----------------------|--------------------------|----------------------------|
+| Debian Router         | Puente (Bridge)          | Red Interna (`interna`)    |
+| VM Cliente 1          | Red Interna (`interna`)  | —                          |
+| VM Cliente 2          | Red Interna (`interna`)  | —                          |
+| VM Cliente 3          | Red Interna (`interna`)  | —                          |
+
+> 🔁 Asegúrate de que todas las máquinas cliente usen **el mismo nombre de Red Interna** (por ejemplo: `interna`).
+
+---
+
+## 🌐 Configuración de red en el router Debian
+
+Edita el archivo de configuración de red:
+
+```bash
+nano /etc/network/interfaces
+
+Copia y pega lo siguiente:
+bash
+
+# Interfaz de loopback
+auto lo
+iface lo inet loopback
+
+# Adaptador 1: Puente (salida a internet)
+# IP fija en la red local del anfitrión
+auto enp0s3
+iface enp0s3 inet static
+    address 192.168.0.100
+    netmask 255.255.255.0
+    gateway 192.168.0.1
+    dns-nameservers 8.8.8.8
+
+# Adaptador 2: Red Interna (para conectar las VMs cliente)
+auto enp0s8
+iface enp0s8 inet static
+    address 192.168.1.1
+    netmask 255.255.255.0
+
+Reinicia el servicio de red:
+bash
+
+systemctl restart networking
+
+🔁 Activar el reenvío de IP (IP Forwarding)
+
+Permite que el router pase tráfico entre redes:
+bash
+
+echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+sysctl -p
+
+🔥 Configurar NAT con iptables
+
+Instala iptables y persistencia de reglas:
+bash
+
+apt update && apt install iptables iptables-persistent -y
+
+Aplica las reglas NAT:
+bash
+
+# Enmascarar el tráfico de salida por la interfaz de internet
+iptables -t nat -A POSTROUTING -o enp0s3 -j MASQUERADE
+
+# Permitir reenvío desde la red interna hacia internet
+iptables -A FORWARD -i enp0s8 -o enp0s3 -j ACCEPT
+
+# Permitir reenvío de vuelta (tráfico establecido o relacionado)
+iptables -A FORWARD -i enp0s3 -o enp0s8 -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+Guarda las reglas para que sobrevivan a reinicios:
+bash
+
+iptables-save > /etc/iptables/rules.v4
+
+💻 Configuración de las máquinas clientes (Red Interna)
+
+Edita el archivo de red en cada VM cliente:
+bash
+
+nano /etc/network/interfaces
+
+Ejemplo para el cliente 1:
+bash
+
+auto enp0s3
+iface enp0s3 inet static
+    address 192.168.1.101
+    netmask 255.255.255.0
+    gateway 192.168.1.1
+    dns-nameservers 8.8.8.8
+
+Para los demás clientes, cambia solo la dirección IP:
+VM Cliente	IP asignada
+Cliente 1	192.168.1.101
+Cliente 2	192.168.1.102
+Cliente 3	192.168.1.103
+
+Reinicia la red en cada cliente:
+bash
+
+systemctl restart networking
+
+✅ Verificación final
+En el router Debian
+bash
+
+ping 8.8.8.8
+
+En cualquier VM cliente
+bash
+
+ping 8.8.8.8
+ping 192.168.1.1   # gateway del router
+
+Si todo funciona correctamente, las máquinas cliente tendrán internet a través del router Debian.
+🧠 Notas adicionales
+
+    El router Debian debe estar encendido antes que los clientes.
+
+    Si el anfitrión cambia de red (por ejemplo, de casa al trabajo), actualiza el gateway y address del adaptador puente (enp0s3).
+
+    Puedes reemplazar enp0s3 y enp0s8 por los nombres reales de tus interfaces (verifica con ip link show).
+
+📁 Archivos finales modificados
+Archivo	Propósito
+/etc/network/interfaces	Configuración estática de IPs
+/etc/sysctl.conf	Activación de IP forwarding
+/etc/iptables/rules.v4	Reglas NAT persistentes
+✨ Resumen visual de la red
+text
+
+[Internet] → [Router físico 192.168.0.1]
+                 │
+                 ↓
+[Debian Router]  (enp0s3: 192.168.0.100)
+                 │
+                 ↓ (enp0s8: 192.168.1.1)
+        ════════════════════════
+        ║     Red Interna       ║
+        ║   192.168.1.x/24      ║
+        ════════════════════════
+          │        │        │
+          ↓        ↓        ↓
+     Cliente1  Cliente2  Cliente3
+      .101      .102      .103
+
+Hecho con 🐧 para entornos de virtualización con Debian 11.
